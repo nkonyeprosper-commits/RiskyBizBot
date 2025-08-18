@@ -19,9 +19,9 @@ export const config = {
     combo: 50, // $50 total for both for 48h
   },
   walletAddresses: {
-    bsc: "0xA9a06682baae823a5Fe34c99bc4bECC7d67475B3",
-    ethereum: "0xA9a06682baae823a5Fe34c99bc4bECC7d67475B3",
-    base: "0xA9a06682baae823a5Fe34c99bc4bECC7d67475B3",
+    bsc: process.env.ADMIN_WALLET_BSC,
+    ethereum: process.env.ADMIN_WALLET_ETH,
+    base: process.env.ADMIN_WALLET_BASE,
   },
   adminChannelId: process.env.ADMIN_CHANNEL_ID || "", // e.g., "-1001234567890"
   // Optional: Add media size limits
