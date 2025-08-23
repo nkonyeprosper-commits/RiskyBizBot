@@ -247,16 +247,108 @@ export class OrderHandler {
     );
   }
 
-  private async handleCancel(chatId: number, userId: number): Promise<void> {
-    await this.orderService.clearUserSession(userId);
-    await this.bot.sendMessage(
-      chatId,
-      "❌ *Order Cancelled*\n\nYour current order has been cancelled. You can start a new order anytime!",
-      {
-        parse_mode: "Markdown",
-        reply_markup: KeyboardService.getMainMenuKeyboard(),
+  private getStepDescription(step: string): string {
+    const stepDescriptions: { [key: string]: string } = {
+      project_name: "Project Name",
+      social_links: "Social Links",
+      social_link: "Adding Social Link",
+      contract_address: "Contract Address",
+      blockchain_selection: "Blockchain Selection",
+      project_description: "Project Description",
+      service_selection: "Service Selection",
+      pinned_posts: "Pinned Posts Count",
+      media_upload: "Media Upload",
+      start_date: "Start Date Selection",
+      end_date: "End Date Selection",
+      payment_network: "Payment Network",
+      payment_confirmation: "Payment Instructions",
+      txn_hash: "Transaction Hash Entry",
+    };
+
+    return stepDescriptions[step] || "Unknown Step";
+  }
+
+  // ✅ NEW: Public cancel method that can be called from TelegramBotService
+  async handleCancelCommand(chatId: number, userId: number): Promise<void> {
+    try {
+      // Check if user has an active session
+      const session = await this.orderService.getUserSession(userId);
+
+      if (!session) {
+        // No active session
+        await this.bot.sendMessage(
+          chatId,
+          "ℹ️ *No Active Order*\n\n" +
+            "You don't have any active order session to cancel.\n\n" +
+            "Use /start to begin a new order!",
+          {
+            parse_mode: "Markdown",
+            reply_markup: KeyboardService.getMainMenuKeyboard(),
+          }
+        );
+        return;
       }
-    );
+
+      // Clear the user session
+      await this.orderService.clearUserSession(userId);
+
+      // Send cancellation confirmation with more details
+      const projectName = session.data.projectName || "Unknown";
+      const step = session.step || "unknown";
+
+      let stepDescription = this.getStepDescription(step);
+
+      await this.bot.sendMessage(
+        chatId,
+        "❌ *Order Session Cancelled*\n\n" +
+          `📱 **Project:** ${projectName}\n` +
+          `📝 **Was at step:** ${stepDescription}\n\n` +
+          "✅ Session data cleared successfully\n" +
+          "✅ You can start fresh anytime\n\n" +
+          "💡 Use /start to begin a new order",
+        {
+          parse_mode: "Markdown",
+          reply_markup: KeyboardService.getMainMenuKeyboard(),
+        }
+      );
+
+      console.log(
+        `Order session cancelled for user ${userId} at step: ${step}`
+      );
+    } catch (error) {
+      console.error("Error in handleCancelCommand:", error);
+
+      // Fallback: Still clear session even if other operations fail
+      try {
+        await this.orderService.clearUserSession(userId);
+      } catch (clearError) {
+        console.error("Error clearing user session:", clearError);
+      }
+
+      await this.bot.sendMessage(
+        chatId,
+        "❌ *Cancellation Error*\n\n" +
+          "There was an error cancelling your session, but your order data has been cleared.\n\n" +
+          "Use /start to begin a new order.",
+        {
+          parse_mode: "Markdown",
+          reply_markup: KeyboardService.getMainMenuKeyboard(),
+        }
+      );
+    }
+  }
+
+  private async handleCancel(chatId: number, userId: number): Promise<void> {
+    // await this.orderService.clearUserSession(userId);
+    // await this.bot.sendMessage(
+    //   chatId,
+    //   "❌ *Order Cancelled*\n\nYour current order has been cancelled. You can start a new order anytime!",
+    //   {
+    //     parse_mode: "Markdown",
+    //     reply_markup: KeyboardService.getMainMenuKeyboard(),
+    //   }
+    // );
+    await this.handleCancelCommand(chatId, userId);
   }
 
   private async handleProjectName(

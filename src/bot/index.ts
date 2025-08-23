@@ -36,6 +36,7 @@ export class TelegramBotService {
       this.blockchainService,
       this.paymentVerificationService // Pass it to OrderHandler
     );
+
     this.adminHandler = new AdminHandler(
       this.bot,
       this.orderService,
@@ -53,6 +54,10 @@ export class TelegramBotService {
         command: "/start",
         description: "Start interacting with bot",
       },
+      {
+        command: "/cancel",
+        description: "Stop a session order you are currently on",
+      },
       { command: "/help", description: "Get information" },
       { command: "/orders", description: "Get current orders" },
       // Add admin commands if needed
@@ -67,6 +72,7 @@ export class TelegramBotService {
     this.bot.onText(/\/start/, this.handleStart.bind(this));
     this.bot.onText(/\/help/, this.handleHelp.bind(this));
     this.bot.onText(/\/orders/, this.handleMyOrders.bind(this));
+    this.bot.onText(/\/cancel/, this.handleCancel.bind(this)); // ✅ Added cancel handler
     // this.bot.onText(/\/getInfoRisk/, this.getGroupId.bind(this));
 
     // Admin commands
@@ -94,6 +100,97 @@ export class TelegramBotService {
     });
 
     console.log("Telegram bot started successfully");
+  }
+
+  // ✅ NEW: Handle /cancel command
+  private async handleCancel(msg: TelegramBot.Message): Promise<void> {
+    const chatId = msg.chat.id;
+    const userId = msg.from?.id!;
+
+    try {
+      // Check if user has an active session
+      const session = await this.orderService.getUserSession(userId);
+
+      if (!session) {
+        // No active session
+        await this.bot.sendMessage(
+          chatId,
+          "ℹ️ *No Active Order*\n\n" +
+            "You don't have any active order session to cancel.\n\n" +
+            "Use /start to begin a new order!",
+          {
+            parse_mode: "Markdown",
+            reply_markup: KeyboardService.getMainMenuKeyboard(),
+          }
+        );
+        return;
+      }
+
+      // Clear the user session
+      await this.orderService.clearUserSession(userId);
+
+      // Send cancellation confirmation
+      await this.bot.sendMessage(
+        chatId,
+        "❌ *Order Session Cancelled*\n\n" +
+          "✅ Your current order session has been cancelled\n" +
+          "✅ All session data has been cleared\n\n" +
+          "💡 You can start a new order anytime using /start",
+        {
+          parse_mode: "Markdown",
+          reply_markup: KeyboardService.getMainMenuKeyboard(),
+        }
+      );
+
+      // Optional: Clear recent chat history (delete bot messages)
+      await this.clearRecentChatHistory(chatId, msg.message_id);
+    } catch (error) {
+      console.error("Error handling cancel command:", error);
+
+      // Fallback: Still clear session even if other operations fail
+      try {
+        await this.orderService.clearUserSession(userId);
+      } catch (clearError) {
+        console.error("Error clearing user session:", clearError);
+      }
+
+      await this.bot.sendMessage(
+        chatId,
+        "❌ *Cancellation Error*\n\n" +
+          "There was an error cancelling your session, but your order data has been cleared.\n\n" +
+          "Use /start to begin a new order.",
+        {
+          parse_mode: "Markdown",
+          reply_markup: KeyboardService.getMainMenuKeyboard(),
+        }
+      );
+    }
+  }
+
+  // ✅ NEW: Clear recent chat history (optional enhancement)
+  private async clearRecentChatHistory(
+    chatId: number,
+    currentMessageId: number
+  ): Promise<void> {
+    try {
+      // Delete the last 10 bot messages (adjust as needed)
+      const messagesToDelete = 10;
+
+      for (let i = 1; i <= messagesToDelete; i++) {
+        try {
+          const messageIdToDelete = currentMessageId - i;
+          if (messageIdToDelete > 0) {
+            await this.bot.deleteMessage(chatId, messageIdToDelete);
+          }
+        } catch (deleteError) {
+          // Ignore individual delete errors (message might not exist or be deletable)
+          console.log(`Could not delete message ${currentMessageId - i}`);
+        }
+      }
+    } catch (error) {
+      console.error("Error clearing chat history:", error);
+      // Don't throw error - this is optional cleanup
+    }
   }
 
   // private async getGroupId(msg: TelegramBot.Message): Promise<void> {
